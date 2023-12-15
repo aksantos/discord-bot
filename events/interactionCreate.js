@@ -1,4 +1,4 @@
-const { Events } = require("discord.js");
+const { Collection, Events } = require("discord.js");
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -13,6 +13,37 @@ module.exports = {
       );
       return;
     }
+
+    const { cooldowns } = interaction.client;
+
+    // Check if the cooldowns Collection already has an entry for the command being used.
+    // If not, add a new entry where the value is initialized as an empty Collection.
+    if (!cooldowns.has(command.data.name)) {
+      cooldowns.set(command.data.name, new Collection());
+    }
+
+    // If the user has already used this command in this session:
+    // get timestamp, calculate the expiration time, and inform the amount of time to wait before using the command again.
+    const now = Date.now();
+    const timestamps = cooldowns.get(command.data.name);
+    const defaultCooldownDuration = 3;
+    const cooldownAmount = (command.cooldown ?? defaultCooldownDuration) * 1000;
+
+    if (timestamps.has(interaction.user.id)) {
+      const expirationTime =
+        timestamps.get(interaction.user.id) + cooldownAmount;
+
+      if (now < expirationTime) {
+        const expiredTimestamp = Math.round(expirationTime / 1000);
+        return interaction.reply({
+          content: `Please wait, you are on a cooldown for \`${command.data.name}\`. You can use it again <t:${expiredTimestamp}:R>.`,
+          ephemeral: true,
+        });
+      }
+    }
+
+    timestamps.set(interaction.user.id, now);
+    setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
 
     try {
       await command.execute(interaction);
